@@ -1,0 +1,14 @@
+{
+  "name": "@weetle/config",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./env": "./env.ts",
+    "./tsconfig": "./tsconfig.base.json"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2"
+  }
+}

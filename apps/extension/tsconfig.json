@@ -1,0 +1,15 @@
+{
+  "extends": "@weetle/config/tsconfig",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "allowArbitraryExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun-types", "@types/chrome", "@types/react", "@types/react-dom"]
+  },
+  "include": ["src/**/*", "*.ts", "*.tsx"],
+  "exclude": ["node_modules", "dist", "build"]
+}

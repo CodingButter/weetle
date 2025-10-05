@@ -1,0 +1,278 @@
+// Prisma schema for Weetle
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- BetterAuth Models ---
+
+model User {
+  id            String              @id
+  name          String
+  email         String              @unique
+  emailVerified Boolean             @default(false)
+  image         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  memberships   CircleMembership[]
+  messages      ChatMessage[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// --- Weetle Core Models ---
+
+model Circle {
+  id          String              @id @default(cuid())
+  name        String
+  description String?
+  visibility  CircleVisibility    @default(PRIVATE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  memberships CircleMembership[]
+  layers      Layer[]
+  invites     Invite[]
+
+  @@map("circle")
+}
+
+enum CircleVisibility {
+  PRIVATE         // Invite-only, requires account
+  PUBLIC          // Anyone with link can join, requires account
+  ANONYMOUS       // Anyone can join without account (live only, no playback)
+}
+
+model CircleMembership {
+  id       String   @id @default(cuid())
+  userId   String
+  circleId String
+  role     Role     @default(MEMBER)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  circle   Circle   @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, circleId])
+  @@map("circle_membership")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Layer {
+  id              String          @id @default(cuid())
+  circleId        String
+  pageKey         String          // Canonicalized URL
+  title           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Permissions (null = inherit from circle)
+  permissionLevel Permission?
+
+  circle          Circle          @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  marks           Mark[]          // Materialized view of current state
+  messages        ChatMessage[]
+  sessions        SessionRecord[] // Metadata about session files
+
+  @@unique([circleId, pageKey])
+  @@index([circleId, pageKey])
+  @@map("layer")
+}
+
+enum Permission {
+  OWNER_ONLY
+  ADMIN_AND_ABOVE
+  MEMBER_AND_ABOVE
+  ALL
+}
+
+// --- Materialized Views (for quick loading) ---
+
+model Mark {
+  id        String   @id @default(cuid())
+  layerId   String
+  kind      MarkKind
+  payload   String   // JSON: position, content, style, etc.
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  layer     Layer    @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@map("mark")
+}
+
+enum MarkKind {
+  STICKY_NOTE
+  HIGHLIGHT
+  STROKE
+  PIN
+  CLIP
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  layerId   String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  layer     Layer    @relation(fields: [layerId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([layerId, createdAt])
+  @@map("chat_message")
+}
+
+// --- Session Recording (metadata only, events stored in separate SQLite files) ---
+
+model SessionRecord {
+  id          String    @id @default(cuid())
+  layerId     String
+  filePath    String    // Path to the session SQLite file
+  startedAt   DateTime
+  endedAt     DateTime?
+  duration    Int?      // seconds
+  eventCount  Int       @default(0)
+  fileSize    Int?      // bytes
+  hasAudio    Boolean   @default(false)
+  hasVideo    Boolean   @default(false)
+
+  layer       Layer     @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@index([layerId, startedAt])
+  @@map("session_record")
+}
+
+// --- Invites ---
+
+model Invite {
+  id        String    @id @default(cuid())
+  circleId  String
+  code      String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  maxUses   Int?
+  useCount  Int       @default(0)
+
+  circle    Circle    @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  @@map("invite")
+}
+
+// --- Anonymous Participants ---
+
+model AnonymousParticipant {
+  id           String   @id @default(cuid())
+  peerId       String   @unique  // PeerJS ID
+  displayName  String?             // Optional display name
+  layerId      String              // Current layer they're on
+  joinedAt     DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+  isActive     Boolean  @default(true)
+
+  @@index([layerId, isActive])
+  @@index([lastSeenAt])
+  @@map("anonymous_participant")
+}
+
+// --- Peer Reporting & Reputation System ---
+
+model PeerReport {
+  id          String       @id @default(cuid())
+  reporterId  String       // User who made the report
+  reportedId  String       // User being reported
+  layerId     String       // Where the incident occurred
+  reason      ReportReason
+  description String?
+  evidence    String?      // JSON: event data, timestamps, etc.
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime     // Auto-expire old reports
+  resolved    Boolean      @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+
+  @@index([reportedId, createdAt])
+  @@index([expiresAt])
+  @@map("peer_report")
+}
+
+enum ReportReason {
+  SPAM              // Sending too many events
+  MALICIOUS_DATA    // Invalid or harmful data
+  HARASSMENT        // Inappropriate behavior
+  IMPERSONATION     // Pretending to be someone else
+  OTHER             // Other reasons
+}
+
+model PeerReputation {
+  userId         String   @id
+  reputationScore Int      @default(100) // Start at 100, decrease with reports
+  reportCount    Int      @default(0)
+  isBlocked      Boolean  @default(false)
+  blockedAt      DateTime?
+  blockedReason  String?
+  lastIncident   DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@index([reputationScore])
+  @@map("peer_reputation")
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@weetle/peer",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts"
+  },
+  "dependencies": {
+    "@weetle/platform": "workspace:*",
+    "peerjs": "^1.5.5"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

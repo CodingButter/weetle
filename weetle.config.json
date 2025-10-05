@@ -1,0 +1,145 @@
+{
+  "$schema": "./weetle.config.schema.json",
+  "version": "1.0.0",
+  "description": "Weetle configuration - modify these values to tune performance and behavior",
+
+  "performance": {
+    "throttling": {
+      "mouseMove": {
+        "minInterval": 33,
+        "maxInterval": 100,
+        "velocityThreshold": 500,
+        "description": "33ms = ~30fps for fast movements, 100ms = ~10fps for slow movements"
+      },
+      "scroll": {
+        "minInterval": 50,
+        "maxInterval": 200,
+        "velocityThreshold": 1000,
+        "description": "50ms = ~20fps for fast scrolling, 200ms = ~5fps for slow scrolling"
+      }
+    },
+    "interpolation": {
+      "baseLerpFactor": 0.1,
+      "maxVelocityBoost": 0.3,
+      "description": "Controls smoothness of cursor interpolation"
+    },
+    "fileTransfer": {
+      "chunkSize": 16384,
+      "chunkDelay": 10,
+      "maxFileSize": 104857600,
+      "description": "Chunk size in bytes (16KB), delay in ms, max file size (100MB)"
+    }
+  },
+
+  "security": {
+    "validation": {
+      "enabled": true,
+      "strictMode": true,
+      "description": "Validate all incoming peer events against schemas"
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "maxEventsPerSecond": 60,
+      "maxEventsPerMinute": 1000,
+      "description": "Limit event rate per peer to prevent spam/DoS"
+    },
+    "reporting": {
+      "enabled": true,
+      "autoBlockThreshold": 5,
+      "reportExpiryDays": 30,
+      "description": "Auto-block peers after N reports, expire old reports"
+    },
+    "sanitization": {
+      "maxStringLength": 10000,
+      "maxArrayLength": 1000,
+      "maxObjectDepth": 10,
+      "description": "Sanitize incoming data to prevent exploits"
+    }
+  },
+
+  "networking": {
+    "peerServer": {
+      "host": "localhost",
+      "port": 9000,
+      "path": "/peer",
+      "secure": false,
+      "description": "PeerJS server configuration"
+    },
+    "reconnection": {
+      "enabled": true,
+      "maxAttempts": 5,
+      "delayMs": 5000,
+      "description": "Automatic reconnection settings"
+    },
+    "timeout": {
+      "connectionMs": 30000,
+      "dataChannelMs": 10000,
+      "description": "Connection and data channel timeouts"
+    }
+  },
+
+  "features": {
+    "stickyNotes": {
+      "enabled": true,
+      "maxPerPage": 100,
+      "maxTextLength": 5000
+    },
+    "drawing": {
+      "enabled": true,
+      "maxStrokePoints": 1000,
+      "maxStrokesPerPage": 500
+    },
+    "fileSharing": {
+      "enabled": true,
+      "allowedTypes": ["image/*", "application/pdf", "text/*"],
+      "maxFileSize": 104857600
+    },
+    "voiceChat": {
+      "enabled": false,
+      "codec": "opus",
+      "bitrate": 64000
+    },
+    "videoChat": {
+      "enabled": false,
+      "resolution": "720p",
+      "frameRate": 30
+    }
+  },
+
+  "ui": {
+    "cursors": {
+      "showRemoteCursors": true,
+      "showUsernames": true,
+      "cursorTrailLength": 10,
+      "fadeOutMs": 3000
+    },
+    "notifications": {
+      "enabled": true,
+      "sound": false,
+      "duration": 3000
+    },
+    "overlay": {
+      "position": "right",
+      "width": 400,
+      "collapsible": true,
+      "defaultCollapsed": false
+    }
+  },
+
+  "experimental": {
+    "meshRelay": {
+      "enabled": false,
+      "description": "Use relay mesh topology instead of full mesh (Phase 2 feature)"
+    },
+    "eventCompression": {
+      "enabled": false,
+      "algorithm": "gzip",
+      "description": "Compress events before sending (experimental)"
+    },
+    "predictiveRendering": {
+      "enabled": false,
+      "lookaheadMs": 100,
+      "description": "Predict remote cursor position based on velocity"
+    }
+  }
+}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weetle</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .status {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .info {
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0.9;
+    }
+
+    .instructions {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .instructions strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .instructions ul {
+      margin-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 4px;
+    }
+
+    a {
+      color: #a5f3fc;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div>
+      <h1>🎯 Weetle</h1>
+      <p class="info">Collaborative browsing is active!</p>
+    </div>
+
+    <div class="status">
+      <div class="status-item">
+        <div class="dot"></div>
+        <span>Extension loaded</span>
+      </div>
+      <div class="status-item">
+        <div class="dot"></div>
+        <span>Content script injected</span>
+      </div>
+      <div class="status-item">
+        <div class="dot"></div>
+        <span>Ready to collaborate</span>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <strong>How to test cursor syncing:</strong>
+      <ul>
+        <li>Open this same website in 2 browser windows</li>
+        <li>Enter a display name when prompted</li>
+        <li>Move your mouse around</li>
+        <li>See remote cursors appear! ✨</li>
+      </ul>
+    </div>
+
+    <div class="info" style="font-size: 12px; text-align: center; opacity: 0.7;">
+      Check the page console (F12) for connection logs
+    </div>
+  </div>
+
+  <script>
+    // Log that popup is open
+    console.log('[Weetle Popup] Opened');
+  </script>
+</body>
+</html>

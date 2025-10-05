@@ -1,0 +1,25 @@
+{
+  "name": "@weetle/eecs",
+  "version": "0.1.0",
+  "description": "Element Event Component System - A DOM-native ECS for collaborative web applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "bun test"
+  },
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "dom",
+    "collaborative",
+    "reactive"
+  ],
+  "author": "Weetle Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

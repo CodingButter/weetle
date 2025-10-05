@@ -1,0 +1,375 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Weetle Configuration",
+  "description": "Configuration schema for Weetle - modify weetle.config.json to tune settings",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration version"
+    },
+    "description": {
+      "type": "string"
+    },
+    "performance": {
+      "type": "object",
+      "properties": {
+        "throttling": {
+          "type": "object",
+          "properties": {
+            "mouseMove": {
+              "$ref": "#/definitions/throttleConfig"
+            },
+            "scroll": {
+              "$ref": "#/definitions/throttleConfig"
+            }
+          }
+        },
+        "interpolation": {
+          "type": "object",
+          "properties": {
+            "baseLerpFactor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Base interpolation factor (0-1)"
+            },
+            "maxVelocityBoost": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Maximum velocity boost for interpolation (0-1)"
+            }
+          }
+        },
+        "fileTransfer": {
+          "type": "object",
+          "properties": {
+            "chunkSize": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 1048576,
+              "description": "File chunk size in bytes (1KB - 1MB)"
+            },
+            "chunkDelay": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "description": "Delay between chunks in milliseconds"
+            },
+            "maxFileSize": {
+              "type": "integer",
+              "minimum": 1048576,
+              "description": "Maximum file size in bytes"
+            }
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "validation": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable event validation"
+            },
+            "strictMode": {
+              "type": "boolean",
+              "description": "Reject events that don't match schema exactly"
+            }
+          }
+        },
+        "rateLimiting": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxEventsPerSecond": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxEventsPerMinute": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "reporting": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "autoBlockThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of reports before auto-blocking peer"
+            },
+            "reportExpiryDays": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "sanitization": {
+          "type": "object",
+          "properties": {
+            "maxStringLength": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxArrayLength": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxObjectDepth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        }
+      }
+    },
+    "networking": {
+      "type": "object",
+      "properties": {
+        "peerServer": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "path": {
+              "type": "string"
+            },
+            "secure": {
+              "type": "boolean"
+            }
+          }
+        },
+        "reconnection": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxAttempts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "delayMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "timeout": {
+          "type": "object",
+          "properties": {
+            "connectionMs": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "dataChannelMs": {
+              "type": "integer",
+              "minimum": 1000
+            }
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "stickyNotes": {
+          "$ref": "#/definitions/featureConfig"
+        },
+        "drawing": {
+          "$ref": "#/definitions/featureConfig"
+        },
+        "fileSharing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowedTypes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "maxFileSize": {
+              "type": "integer"
+            }
+          }
+        },
+        "voiceChat": {
+          "$ref": "#/definitions/mediaConfig"
+        },
+        "videoChat": {
+          "$ref": "#/definitions/mediaConfig"
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "cursors": {
+          "type": "object",
+          "properties": {
+            "showRemoteCursors": {
+              "type": "boolean"
+            },
+            "showUsernames": {
+              "type": "boolean"
+            },
+            "cursorTrailLength": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fadeOutMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "sound": {
+              "type": "boolean"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "overlay": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["left", "right"]
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 800
+            },
+            "collapsible": {
+              "type": "boolean"
+            },
+            "defaultCollapsed": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "experimental": {
+      "type": "object",
+      "properties": {
+        "meshRelay": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        },
+        "eventCompression": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "algorithm": {
+              "type": "string",
+              "enum": ["gzip", "brotli", "lz4"]
+            }
+          }
+        },
+        "predictiveRendering": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "lookaheadMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "throttleConfig": {
+      "type": "object",
+      "properties": {
+        "minInterval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum milliseconds between events (higher frequency)"
+        },
+        "maxInterval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum milliseconds between events (lower frequency)"
+        },
+        "velocityThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Velocity threshold in pixels/second"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["minInterval", "maxInterval", "velocityThreshold"]
+    },
+    "featureConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["enabled"]
+    },
+    "mediaConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "codec": {
+          "type": "string"
+        },
+        "bitrate": {
+          "type": "integer",
+          "minimum": 8000
+        }
+      }
+    }
+  }
+}

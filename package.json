@@ -1,0 +1,18 @@
+{
+  "name": "weetle",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --filter './apps/*' dev",
+    "db:init": "cd packages/db && bun run init",
+    "db:studio": "cd packages/db && bun run studio",
+    "build:extension": "cd apps/extension && bun run build"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "dependencies": {
+    "peer": "^1.0.2",
+    "peerjs": "^1.5.5"
+  }
+}

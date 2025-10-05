@@ -1,0 +1,9 @@
+{
+  "extends": "@weetle/config/tsconfig",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["bun-types"]
+  },
+  "include": ["**/*"],
+  "exclude": ["node_modules", "dist"]
+}
