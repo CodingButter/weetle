@@ -40,6 +40,10 @@
         "@types/react-dom": "^19",
         "@weetle/config": "workspace:*",
         "@weetle/db": "workspace:*",
+        "@weetle/dom-replicator": "workspace:*",
+        "@weetle/eecs": "workspace:*",
+        "@weetle/peer": "workspace:*",
+        "@weetle/platform": "workspace:*",
         "autoprefixer": "^10.4.21",
         "bun-copy-plugin": "^0.2.1",
         "bun-plugin-tailwind": "latest",
@@ -82,6 +86,20 @@
       },
       "peerDependencies": {
         "typescript": "^5",
+      },
+    },
+    "packages/dom-replicator": {
+      "name": "@weetle/dom-replicator",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.3.3",
+      },
+    },
+    "packages/eecs": {
+      "name": "@weetle/eecs",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.0.0",
       },
     },
     "packages/peer": {
@@ -377,6 +395,10 @@
     "@weetle/config": ["@weetle/config@workspace:packages/config"],
 
     "@weetle/db": ["@weetle/db@workspace:packages/db"],
+
+    "@weetle/dom-replicator": ["@weetle/dom-replicator@workspace:packages/dom-replicator"],
+
+    "@weetle/eecs": ["@weetle/eecs@workspace:packages/eecs"],
 
     "@weetle/peer": ["@weetle/peer@workspace:packages/peer"],
 

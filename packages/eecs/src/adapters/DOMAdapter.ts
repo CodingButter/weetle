@@ -7,6 +7,24 @@ import type { EnvironmentAdapter, EECSElement, QueryOptions } from '../types';
 
 export class DOMAdapter implements EnvironmentAdapter {
   private eventHandlers = new Map<string, Set<(event: any) => void>>();
+  private componentRegistry = new Map<string, HTMLElement>(); // Registry for shadow DOM components
+
+  /**
+   * Register a component (useful for shadow DOM elements)
+   */
+  registerComponent(element: HTMLElement): void {
+    const id = element.dataset.weetleId;
+    if (id) {
+      this.componentRegistry.set(id, element);
+    }
+  }
+
+  /**
+   * Unregister a component
+   */
+  unregisterComponent(id: string): void {
+    this.componentRegistry.delete(id);
+  }
 
   query(options: QueryOptions): EECSElement[] {
     let selector = '[data-weetle-entity]';
@@ -25,11 +43,43 @@ export class DOMAdapter implements EnvironmentAdapter {
       selector += options.selector;
     }
 
-    const elements = Array.from(document.querySelectorAll(selector));
-    return elements.map(el => this.wrapElement(el as HTMLElement));
+    // Query DOM elements
+    const domElements = Array.from(document.querySelectorAll(selector));
+    const results = domElements.map(el => this.wrapElement(el as HTMLElement));
+
+    // Also check component registry
+    const registryElements = Array.from(this.componentRegistry.values())
+      .filter(el => {
+        // Match entity type
+        if (options.entityType && el.dataset.weetleEntity !== options.entityType) {
+          return false;
+        }
+
+        // Match components
+        if (options.components) {
+          return options.components.every(comp => {
+            const attrName = `weetle${comp.charAt(0).toUpperCase() + comp.slice(1)}`;
+            return el.dataset[attrName] === 'true';
+          });
+        }
+
+        return true;
+      })
+      .filter(el => !domElements.includes(el)); // Avoid duplicates
+
+    results.push(...registryElements.map(el => this.wrapElement(el)));
+
+    return results;
   }
 
   getElementById(id: string): EECSElement | null {
+    // Check registry first (faster for shadow DOM components)
+    const registryEl = this.componentRegistry.get(id);
+    if (registryEl) {
+      return this.wrapElement(registryEl);
+    }
+
+    // Fallback to DOM query
     const el = document.querySelector(`[data-weetle-id="${id}"]`);
     return el ? this.wrapElement(el as HTMLElement) : null;
   }
@@ -82,7 +132,14 @@ export class DOMAdapter implements EnvironmentAdapter {
   }
 
   removeElement(element: EECSElement): void {
-    (element.native as HTMLElement).remove();
+    const el = element.native as HTMLElement;
+
+    // Unregister from component registry if present
+    if (element.id) {
+      this.unregisterComponent(element.id);
+    }
+
+    el.remove();
   }
 
   hasComponent(element: EECSElement, component: string): boolean {

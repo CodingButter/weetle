@@ -48,6 +48,9 @@ export class StickyNote {
   // Resize observer
   private resizeObserver: ResizeObserver | null = null;
 
+  // Drag broadcast throttling
+  private lastDragBroadcast = 0;
+
   constructor(options: StickyNoteOptions) {
     this.options = options;
     this.data = { ...options.data };

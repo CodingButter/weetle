@@ -12,7 +12,9 @@ import {
   simulateClick,
   simulateKeyboardInput,
 } from "./elementSelector";
-import { StickyNotesManager, type StickyNoteData } from "./stickyNote";
+import { SimpleStickyNotesManager } from "./stickyNoteSimple";
+import { DOMReplicator } from "@weetle/dom-replicator";
+import type { DOMDelta } from "@weetle/dom-replicator";
 
 console.log("[Weetle] Content script loaded on:", window.location.href);
 
@@ -25,88 +27,13 @@ let remoteCursors = new Map<string, HTMLDivElement>();
 let cursorInterpolators = new Map<string, PositionInterpolator>();
 let cursorScales = new Map<string, number>(); // Track scale for each cursor
 let animationFrameId: number | null = null;
-let stickyNotesManager: StickyNotesManager | null = null;
+let stickyNotesManager: SimpleStickyNotesManager | null = null;
+let domReplicator: DOMReplicator | null = null; // DOM replication layer
 let audioEnabled = false; // Track if audio is enabled (after first user interaction)
 let clickAudio: HTMLAudioElement | null = null;
 
-// Event deduplication with custom comparators (prevents ping-pong loops)
-interface RecentEvent {
-  type: string;
-  payload: any;
-  timestamp: number;
-}
-
-// Keep last N events per type for comparison
-const RECENT_EVENT_LIMIT = 5;
-const recentEvents = new Map<string, RecentEvent[]>();
-
-/**
- * Event comparator functions - return true if events should be considered duplicates
- */
-type EventComparator = (a: any, b: any) => boolean;
-
-const eventComparators: Record<string, EventComparator> = {
-  "mark:create": (a, b) => a.id === b.id,
-
-  "mark:update": (a, b) => {
-    // Same note ID is enough - ignore timestamps and minor dimension changes
-    return a.id === b.id;
-  },
-
-  "mark:delete": (a, b) => a.id === b.id,
-
-  "mouse:move": (a, b) => {
-    // Exact position match (already throttled)
-    return a.u === b.u && a.v === b.v;
-  },
-
-  "mouse:click": (a, b) => {
-    // Same position and element
-    return a.u === b.u && a.v === b.v && a.elementSelector === b.elementSelector;
-  },
-
-  "keyboard:input": (a, b) => {
-    // Same key and element
-    return a.key === b.key && a.elementSelector === b.elementSelector;
-  },
-};
-
-/**
- * Check if event is duplicate (recently received from peer)
- */
-function isDuplicateEvent(type: string, payload: any): boolean {
-  const recent = recentEvents.get(type) || [];
-  const comparator = eventComparators[type];
-
-  if (!comparator) {
-    // No comparator defined, use exact JSON match as fallback
-    return recent.some(event => JSON.stringify(event.payload) === JSON.stringify(payload));
-  }
-
-  // Use custom comparator
-  return recent.some(event => comparator(event.payload, payload));
-}
-
-/**
- * Cache received event to prevent re-broadcasting
- */
-function cacheReceivedEvent(type: string, payload: any): void {
-  const recent = recentEvents.get(type) || [];
-
-  // Add new event
-  recent.push({
-    type,
-    payload,
-    timestamp: Date.now(),
-  });
-
-  // Keep only last N events
-  if (recent.length > RECENT_EVENT_LIMIT) {
-    recent.shift();
-  }
-
-  recentEvents.set(type, recent);
-}
+// No more event deduplication needed!
+// DOMReplicator handles ping-pong prevention with ignoreNextMutation
 
 /**
  * Initialize Weetle on this page
@@ -330,44 +257,12 @@ function setupPeerEventHandlers() {
     }
   });
 
-  // Handle sticky note events
-  peerManager.on("mark:create", (event, peerId) => {
-    const noteData = event.payload as StickyNoteData;
-    if (stickyNotesManager && noteData.id) {
-      console.log("[Weetle] Creating sticky note from peer:", noteData.id);
-
-      // Cache this event to prevent re-broadcasting
-      cacheReceivedEvent("mark:create", noteData);
-
-      // Check if note already exists (might have been created locally)
-      if (!stickyNotesManager.getNote(noteData.id)) {
-        stickyNotesManager.addNote(noteData);
-      }
-    }
-  });
-
-  peerManager.on("mark:update", (event, peerId) => {
-    const noteData = event.payload as StickyNoteData;
-    if (stickyNotesManager && noteData.id) {
-      console.log("[Weetle] Updating sticky note from peer:", noteData.id);
-
-      // Cache this event to prevent re-broadcasting
-      cacheReceivedEvent("mark:update", noteData);
-
-      // Update the note (no need for silent flag with deduplication)
-      stickyNotesManager.updateNote(noteData.id, noteData);
-    }
-  });
-
-  peerManager.on("mark:delete", (event, peerId) => {
-    const { id } = event.payload;
-    if (stickyNotesManager && id) {
-      console.log("[Weetle] Deleting sticky note from peer:", id);
-
-      // Cache this event to prevent re-broadcasting
-      cacheReceivedEvent("mark:delete", { id });
-
-      stickyNotesManager.deleteNote(id);
+  // Handle DOM updates from peers via DOMReplicator
+  peerManager.on("dom:update", (event, peerId) => {
+    const deltas = event.payload as DOMDelta[];
+    if (domReplicator && deltas) {
+      console.log("[Weetle] Applying DOM deltas from peer:", deltas.length);
+      domReplicator.applyDeltas(deltas);
     }
   });
 }
@@ -799,7 +694,7 @@ async function unregisterPeer(peerId: string) {
 }
 
 /**
- * Initialize sticky notes manager
+ * Initialize sticky notes with DOMReplicator
  */
 function initializeStickyNotes() {
   if (!peerManager || !currentUserId) {
@@ -807,42 +702,24 @@ function initializeStickyNotes() {
     return;
   }
 
-  stickyNotesManager = new StickyNotesManager({
-    onCreate: (data) => {
-      // Check if this is a duplicate event (recently received from peer)
-      if (isDuplicateEvent("mark:create", data)) {
-        console.log("[Weetle] Skipping broadcast of duplicate sticky note creation:", data.id);
-        return;
-      }
+  // Initialize simple sticky notes manager
+  stickyNotesManager = new SimpleStickyNotesManager();
 
-      console.log("[Weetle] Broadcasting sticky note creation:", data.id);
-      peerManager!.broadcast("mark:create", data);
-    },
-    onUpdate: (data) => {
-      // Check if this is a duplicate event (recently received from peer)
-      if (isDuplicateEvent("mark:update", data)) {
-        console.log("[Weetle] Skipping broadcast of duplicate sticky note update:", data.id);
-        return;
-      }
-
-      console.log("[Weetle] Broadcasting sticky note update:", data.id);
-      peerManager!.broadcast("mark:update", data);
-    },
-    onDelete: (id) => {
-      const payload = { id };
-
-      // Check if this is a duplicate event (recently received from peer)
-      if (isDuplicateEvent("mark:delete", payload)) {
-        console.log("[Weetle] Skipping broadcast of duplicate sticky note deletion:", id);
-        return;
-      }
-
-      console.log("[Weetle] Broadcasting sticky note deletion:", id);
-      peerManager!.broadcast("mark:delete", payload);
+  // Initialize DOMReplicator to watch sticky notes
+  domReplicator = new DOMReplicator({
+    selector: '[data-weetle-entity="sticky-note"]', // Watch sticky note elements
+    batchInterval: 16, // ~60fps
+    onDeltasReady: (deltas) => {
+      // Broadcast deltas to all peers
+      console.log("[Weetle] Broadcasting DOM deltas:", deltas.length);
+      peerManager!.broadcast("dom:update", deltas);
     },
   });
 
-  console.log("[Weetle] Sticky notes manager initialized");
+  // Start watching for DOM changes
+  domReplicator.start();
+
+  console.log("[Weetle] Sticky notes with DOMReplicator initialized");
 }
 
 /**
@@ -862,11 +739,13 @@ function setupStickyNoteShortcut() {
       if (stickyNotesManager && currentUserId) {
         console.log("[Weetle] Creating sticky note via keyboard shortcut (Alt+N)");
 
-        // Create note at cursor position or center of viewport
+        // Create note at center of viewport
         const x = window.innerWidth / 2 - 90;
         const y = window.innerHeight / 2 - 75;
 
-        stickyNotesManager.createNote(currentUserId, x, y);
+        // Create the note - DOMReplicator will detect it and broadcast!
+        const noteId = stickyNotesManager.createNote(currentUserId, x, y);
+        console.log("[Weetle] Created sticky note:", noteId);
       } else {
         console.warn("[Weetle] Cannot create sticky note: manager or userId missing");
       }

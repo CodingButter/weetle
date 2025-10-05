@@ -1,0 +1,26 @@
+{
+  "name": "@weetle/dom-replicator",
+  "version": "0.1.0",
+  "description": "Universal DOM replication using MutationObserver - works with any framework or vanilla JS",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "dom",
+    "replication",
+    "sync",
+    "collaborative",
+    "mutation-observer",
+    "webrtc"
+  ],
+  "author": "CodingButter",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

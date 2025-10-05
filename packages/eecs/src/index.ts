@@ -1,6 +1,7 @@
 /**
  * EECS - Element Event Component System
- * A DOM-native ECS for collaborative web applications
+ * A DOM-native ECS for local interactions
+ * Use @weetle/dom-replicator for network sync
  */
 
 // Core types
@@ -13,22 +14,24 @@ export type {
   EnvironmentAdapter,
 } from './types';
 
-// Batching types
-export type {
-  StateChange,
-  StateUpdateBatch,
-  BatchCollector,
-} from './batching';
-
-export { DefaultBatchCollector } from './batching';
-
 // Core classes
 export { World } from './World';
 export { System } from './System';
 
+// Reactive Architecture
+export { GlobalState } from './GlobalState';
+export type {
+  MouseState,
+  KeyboardState,
+  DragState,
+  EventSource,
+} from './GlobalState';
+
+export { MouseEventHandler } from './handlers/MouseEventHandler';
+
 // Systems
-export { StateSyncSystem } from './systems/StateSyncSystem';
-export { DragSystem } from './systems/DragSystem';
+export { DragSystem } from './systems/DragSystemReactive';
+export type { DragSystemConfig } from './systems/DragSystemReactive';
 
 // Adapters
 export { DOMAdapter } from './adapters/DOMAdapter';

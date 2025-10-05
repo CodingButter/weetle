@@ -32,6 +32,8 @@
   "devDependencies": {
     "@weetle/config": "workspace:*",
     "@weetle/db": "workspace:*",
+    "@weetle/dom-replicator": "workspace:*",
+    "@weetle/eecs": "workspace:*",
     "@weetle/peer": "workspace:*",
     "@weetle/platform": "workspace:*",
     "@types/bun": "latest",
