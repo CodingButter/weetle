@@ -63,15 +63,24 @@ export class StateManager {
       }
 
       // Get or create layer for this circle/page
+      const layerBody: any = {
+        pageKey: this.pageKey,
+      };
+
+      // Only include circleId if not using default
+      if (!isDefaultCircle) {
+        layerBody.circleId = this.circleId;
+      }
+
+      // Only include password if it exists
+      if (this.circlePassword) {
+        layerBody.password = this.circlePassword;
+      }
+
       const layerResponse = await fetch(`${this.apiUrl}/public/layers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          // Don't send circleId if using default
-          circleId: isDefaultCircle ? undefined : this.circleId,
-          pageKey: this.pageKey,
-          password: this.circlePassword,
-        }),
+        body: JSON.stringify(layerBody),
       });
 
       if (!layerResponse.ok) {
