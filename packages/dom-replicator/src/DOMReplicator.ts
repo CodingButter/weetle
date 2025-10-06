@@ -146,13 +146,67 @@ export class DOMReplicator {
         };
 
       case 'childList':
-        // For now, we'll handle this as a full element sync
-        // TODO: More granular child node tracking
-        return null;
+        // Handle element creation and deletion
+        const changes: DOMChange[] = [];
+
+        // Check for added nodes (creation)
+        mutation.addedNodes.forEach(node => {
+          if (node instanceof Element) {
+            const entityId = this.getEntityId(node);
+            if (entityId) {
+              // New element with entity ID - send create event
+              changes.push({
+                type: 'create',
+                value: this.serializeElement(node as HTMLElement),
+              });
+            }
+          }
+        });
+
+        // Check for removed nodes (deletion)
+        mutation.removedNodes.forEach(node => {
+          if (node instanceof Element) {
+            const entityId = this.getEntityId(node);
+            if (entityId) {
+              // Element removed - send delete event
+              changes.push({
+                type: 'delete',
+                property: 'entityId',
+                value: entityId,
+              });
+            }
+          }
+        });
+
+        return changes.length > 0 ? changes[0] : null; // Return first change for now
 
       default:
         return null;
     }
+  }
+
+  /**
+   * Serialize an element for creation delta
+   */
+  private serializeElement(element: HTMLElement): any {
+    const serialized: any = {
+      entityId: element.dataset?.weetleId || element.dataset?.replicateId,
+      entityType: element.dataset?.weetleEntity,
+      tagName: element.tagName.toLowerCase(),
+      attributes: {},
+      style: element.style.cssText,
+      textContent: element.textContent,
+    };
+
+    // Capture all data attributes
+    for (let i = 0; i < element.attributes.length; i++) {
+      const attr = element.attributes[i];
+      if (attr.name.startsWith('data-')) {
+        serialized.attributes[attr.name] = attr.value;
+      }
+    }
+
+    return serialized;
   }
 
   /**
@@ -203,13 +257,20 @@ export class DOMReplicator {
     this.ignoreNextMutation = true;
 
     for (const delta of deltas) {
-      const element = this.findElement(delta.entityId);
-      if (!element) {
-        console.warn(`[DOMReplicator] Element not found: ${delta.entityId}`);
-        continue;
-      }
-
       for (const change of delta.changes) {
+        // Handle create/delete without needing existing element
+        if (change.type === 'create' || change.type === 'delete') {
+          this.applyChange(null, change);
+          continue;
+        }
+
+        // For other changes, find the element
+        const element = this.findElement(delta.entityId);
+        if (!element) {
+          console.warn(`[DOMReplicator] Element not found: ${delta.entityId}`);
+          continue;
+        }
+
         this.applyChange(element, change);
       }
     }
@@ -233,26 +294,70 @@ export class DOMReplicator {
   /**
    * Apply a single change to an element
    */
-  private applyChange(element: HTMLElement, change: DOMChange): void {
+  private applyChange(element: HTMLElement | null, change: DOMChange): void {
     switch (change.type) {
+      case 'create':
+        // Create new element from serialized data
+        if (change.value) {
+          this.createElement(change.value);
+        }
+        break;
+
+      case 'delete':
+        // Remove element by ID
+        if (change.value) {
+          const elToDelete = this.findElement(change.value);
+          if (elToDelete) {
+            elToDelete.remove();
+          }
+        }
+        break;
+
       case 'attribute':
-        if (change.property && change.value !== undefined) {
+        if (element && change.property && change.value !== undefined) {
           element.setAttribute(change.property, change.value);
         }
         break;
 
       case 'style':
-        if (change.property === 'cssText' && change.value !== undefined) {
+        if (element && change.property === 'cssText' && change.value !== undefined) {
           element.style.cssText = change.value;
         }
         break;
 
       case 'text':
-        if (change.value !== undefined) {
+        if (element && change.value !== undefined) {
           element.textContent = change.value;
         }
         break;
     }
+  }
+
+  /**
+   * Create element from serialized data
+   */
+  private createElement(data: any): void {
+    const element = document.createElement(data.tagName || 'div');
+
+    // Set data attributes
+    if (data.attributes) {
+      for (const [key, value] of Object.entries(data.attributes)) {
+        element.setAttribute(key, value as string);
+      }
+    }
+
+    // Set style
+    if (data.style) {
+      element.style.cssText = data.style;
+    }
+
+    // Set text content
+    if (data.textContent) {
+      element.textContent = data.textContent;
+    }
+
+    // Append to body
+    document.body.appendChild(element);
   }
 
   /**

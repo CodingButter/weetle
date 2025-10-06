@@ -12,7 +12,9 @@ import {
   simulateClick,
   simulateKeyboardInput,
 } from "./elementSelector";
-import { SimpleStickyNotesManager } from "./stickyNoteSimple";
+import { StickyNotesManager } from "./stickyNotes";
+import { RPCBridge } from "./rpc";
+import type { RPCCall } from "./rpc";
 import { DOMReplicator } from "@weetle/dom-replicator";
 import type { DOMDelta } from "@weetle/dom-replicator";
 
@@ -27,8 +29,9 @@ let remoteCursors = new Map<string, HTMLDivElement>();
 let cursorInterpolators = new Map<string, PositionInterpolator>();
 let cursorScales = new Map<string, number>(); // Track scale for each cursor
 let animationFrameId: number | null = null;
-let stickyNotesManager: SimpleStickyNotesManager | null = null;
-let domReplicator: DOMReplicator | null = null; // DOM replication layer
+let stickyNotesManager: StickyNotesManager | null = null;
+let rpcBridge: RPCBridge | null = null; // RPC for Weetle components
+let domReplicator: DOMReplicator | null = null; // DOM replication for page interactions
 let audioEnabled = false; // Track if audio is enabled (after first user interaction)
 let clickAudio: HTMLAudioElement | null = null;
 
@@ -257,12 +260,21 @@ function setupPeerEventHandlers() {
     }
   });
 
-  // Handle DOM updates from peers via DOMReplicator
+  // Handle DOM updates from peers (page interactions)
   peerManager.on("dom:update", (event, peerId) => {
     const deltas = event.payload as DOMDelta[];
     if (domReplicator && deltas) {
       console.log("[Weetle] Applying DOM deltas from peer:", deltas.length);
       domReplicator.applyDeltas(deltas);
+    }
+  });
+
+  // Handle RPC calls from peers (Weetle components)
+  peerManager.on("rpc:call", (event, peerId) => {
+    const rpcCall = event.payload as RPCCall;
+    if (rpcBridge) {
+      console.log("[Weetle] Executing RPC from peer:", rpcCall.functionName);
+      rpcBridge.handleRemote(rpcCall);
     }
   });
 }
@@ -694,7 +706,7 @@ async function unregisterPeer(peerId: string) {
 }
 
 /**
- * Initialize sticky notes with DOMReplicator
+ * Initialize sticky notes with RPC system
  */
 function initializeStickyNotes() {
   if (!peerManager || !currentUserId) {
@@ -702,24 +714,29 @@ function initializeStickyNotes() {
     return;
   }
 
-  // Initialize simple sticky notes manager
-  stickyNotesManager = new SimpleStickyNotesManager();
+  // Initialize RPC bridge for Weetle components
+  rpcBridge = new RPCBridge();
+  rpcBridge.setSendCallback((rpcCall) => {
+    console.log("[Weetle] Broadcasting RPC call:", rpcCall.functionName);
+    peerManager!.broadcast("rpc:call", rpcCall);
+  });
 
-  // Initialize DOMReplicator to watch sticky notes
+  // Initialize sticky notes manager with RPC
+  stickyNotesManager = new StickyNotesManager(rpcBridge);
+
+  // Initialize DOMReplicator for page interactions (clicks, typing, etc.)
   domReplicator = new DOMReplicator({
-    selector: '[data-weetle-entity="sticky-note"]', // Watch sticky note elements
+    selector: 'input, textarea, [contenteditable]', // Watch page inputs
     batchInterval: 16, // ~60fps
     onDeltasReady: (deltas) => {
-      // Broadcast deltas to all peers
       console.log("[Weetle] Broadcasting DOM deltas:", deltas.length);
       peerManager!.broadcast("dom:update", deltas);
     },
   });
 
-  // Start watching for DOM changes
   domReplicator.start();
 
-  console.log("[Weetle] Sticky notes with DOMReplicator initialized");
+  console.log("[Weetle] Sticky notes with RPC + DOMReplicator initialized");
 }
 
 /**

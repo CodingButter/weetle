@@ -403,114 +403,37 @@ export class StickyNote {
     this.resizeObserver?.disconnect();
     this.container.remove();
   }
-}
 
-/**
- * Sticky Notes Manager
- * Manages all sticky notes on the page
- */
-export class StickyNotesManager {
-  private notes = new Map<string, StickyNote>();
-  private onUpdate?: (data: StickyNoteData) => void;
-  private onDelete?: (id: string) => void;
-  private onCreate?: (data: StickyNoteData) => void;
+  public update(updates: Partial<StickyNoteData>): void {
+    this.data = { ...this.data, ...updates };
 
-  constructor(callbacks?: {
-    onUpdate?: (data: StickyNoteData) => void;
-    onDelete?: (id: string) => void;
-    onCreate?: (data: StickyNoteData) => void;
-  }) {
-    this.onUpdate = callbacks?.onUpdate;
-    this.onDelete = callbacks?.onDelete;
-    this.onCreate = callbacks?.onCreate;
-  }
-
-  public createNote(userId: string, initialX?: number, initialY?: number): StickyNote {
-    const data: StickyNoteData = {
-      id: crypto.randomUUID(),
-      x: initialX ?? window.innerWidth / 2 - 90,
-      y: initialY ?? window.innerHeight / 2 - 75,
-      width: 180,
-      height: 150,
-      content: '',
-      backgroundColor: '#fff3cd',
-      textColor: '#000000',
-      createdBy: userId,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const note = new StickyNote({
-      data,
-      onUpdate: (updated) => {
-        this.onUpdate?.(updated);
-      },
-      onDelete: (id) => {
-        this.deleteNote(id);
-        this.onDelete?.(id);
-      },
-      onFocus: (id) => {
-        this.bringToFront(id);
-      },
-    });
-
-    note.mount();
-    this.notes.set(data.id, note);
-    this.onCreate?.(data);
-
-    return note;
-  }
-
-  public addNote(data: StickyNoteData): StickyNote {
-    const note = new StickyNote({
-      data,
-      onUpdate: (updated) => {
-        this.onUpdate?.(updated);
-      },
-      onDelete: (id) => {
-        this.deleteNote(id);
-        this.onDelete?.(id);
-      },
-      onFocus: (id) => {
-        this.bringToFront(id);
-      },
-    });
-
-    note.mount();
-    this.notes.set(data.id, note);
-
-    return note;
-  }
-
-  public deleteNote(id: string): void {
-    const note = this.notes.get(id);
-    if (note) {
-      note.destroy();
-      this.notes.delete(id);
+    // Update position
+    if (updates.x !== undefined || updates.y !== undefined) {
+      if (this.noteElement) {
+        this.noteElement.style.left = `${this.data.x}px`;
+        this.noteElement.style.top = `${this.data.y}px`;
+      }
     }
-  }
 
-  public updateNote(id: string, data: Partial<StickyNoteData>): void {
-    const note = this.notes.get(id);
-    if (note) {
-      note.updateData(data);
+    // Update content
+    if (updates.content !== undefined && this.contentElement) {
+      this.contentElement.textContent = this.data.content;
     }
-  }
 
-  public getNote(id: string): StickyNote | undefined {
-    return this.notes.get(id);
-  }
+    // Update colors
+    if (updates.backgroundColor !== undefined && this.noteElement) {
+      this.noteElement.style.backgroundColor = this.data.backgroundColor;
+    }
+    if (updates.textColor !== undefined && this.noteElement) {
+      this.noteElement.style.color = this.data.textColor;
+    }
 
-  public getAllNotes(): StickyNote[] {
-    return Array.from(this.notes.values());
-  }
-
-  private bringToFront(id: string): void {
-    // Could implement z-index management here if needed
-  }
-
-  public clear(): void {
-    this.notes.forEach((note) => note.destroy());
-    this.notes.clear();
+    // Update dimensions
+    if (updates.width !== undefined || updates.height !== undefined) {
+      if (this.noteElement) {
+        this.noteElement.style.width = `${this.data.width}px`;
+        this.noteElement.style.height = `${this.data.height}px`;
+      }
+    }
   }
 }
