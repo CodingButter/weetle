@@ -885,7 +885,7 @@ function handleCircleUpdate(circleId: string, isTemporary: boolean) {
   // Disconnect from previous circle's peers
   if (peerManager) {
     console.log('[Weetle] Disconnecting from previous circle peers');
-    peerManager.cleanup();
+    peerManager.destroy();
 
     // Clear remote cursors
     remoteCursors.forEach(cursor => cursor.remove());

@@ -79,6 +79,7 @@ model Circle {
   id          String              @id @default(cuid())
   name        String
   description String?
+  passwordHash String?            // Optional password protection for public circles
   visibility  CircleVisibility    @default(PRIVATE)
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
