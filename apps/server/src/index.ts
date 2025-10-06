@@ -13,6 +13,10 @@ import { circleRoutes } from "./routes/circles";
 import { layerRoutes } from "./routes/layers";
 import { sessionRoutes } from "./routes/sessions";
 import { peerRoutes } from "./routes/peers";
+import { elementsRoutes } from "./routes/elements";
+import { anonymousRoutes } from "./routes/anonymous";
+import { publicCircleRoutes } from "./routes/publicCircles";
+import { gatewayRoutes } from "./routes/gateway";
 
 // PeerJS server
 import { createPeerServer } from "./peer-server";
@@ -52,6 +56,18 @@ const app = new Elysia()
 
   // Peer discovery routes (unauthenticated for anonymous mode)
   .use(peerRoutes)
+
+  // Anonymous collaboration routes (no auth required)
+  .use(anonymousRoutes)
+
+  // Public circle routes (password-protected circles, no auth)
+  .use(publicCircleRoutes)
+
+  // Element routes
+  .use(elementsRoutes)
+
+  // Gateway routes for share links
+  .use(gatewayRoutes)
 
   // Error handling
   .onError(({ code, error, set }) => {

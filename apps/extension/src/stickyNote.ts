@@ -37,8 +37,6 @@ export class StickyNote {
   private noteElement: HTMLDivElement | null = null;
   private headerElement: HTMLDivElement | null = null;
   private contentElement: HTMLDivElement | null = null;
-  private bgColorInput: HTMLInputElement | null = null;
-  private textColorInput: HTMLInputElement | null = null;
 
   // Drag state
   private isDragging = false;
@@ -57,6 +55,8 @@ export class StickyNote {
 
     // Create container with shadow DOM
     this.container = document.createElement('div');
+    this.container.className = 'weetle-sticky-note';
+    this.container.setAttribute('data-weetle', 'sticky-note');
     this.container.style.cssText = `
       position: fixed;
       z-index: 10000;
@@ -98,7 +98,7 @@ export class StickyNote {
           transition: box-shadow 0.2s, opacity 0.2s, transform 0.1s;
           cursor: move;
           resize: both;
-          overflow: hidden;
+          overflow: visible;
           pointer-events: auto;
         }
 
@@ -167,6 +167,13 @@ export class StickyNote {
           color: #ff0000;
         }
 
+        .color-input {
+          position: absolute;
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
         .sticky-note-content {
           flex: 1;
           padding: 0.75rem;
@@ -201,10 +208,8 @@ export class StickyNote {
 
         .color-picker {
           position: absolute;
-          width: 0;
-          height: 0;
-          opacity: 0;
-          pointer-events: none;
+          top: -9999px;
+          left: -9999px;
         }
       </style>
 
@@ -212,20 +217,20 @@ export class StickyNote {
         <div class="sticky-note-header">
           <div class="sticky-note-drag-handle">☰☰</div>
           <div class="sticky-note-controls">
-            <button class="sticky-note-control-btn sticky-note-bg-color" title="Background Color">
+            <input type="color" id="bg-color-${this.data.id}" class="color-input" value="${backgroundColor}">
+            <label for="bg-color-${this.data.id}" class="sticky-note-control-btn" title="Background Color">
               🎨
-            </button>
-            <button class="sticky-note-control-btn sticky-note-text-color" title="Text Color">
+            </label>
+            <input type="color" id="text-color-${this.data.id}" class="color-input" value="${textColor}">
+            <label for="text-color-${this.data.id}" class="sticky-note-control-btn" title="Text Color">
               ✏️
-            </button>
+            </label>
             <button class="sticky-note-control-btn sticky-note-delete" title="Delete">
               ✕
             </button>
           </div>
         </div>
         <div class="sticky-note-content" contenteditable="true">${this.escapeHtml(content)}</div>
-        <input type="color" class="color-picker bg-color-picker" value="${backgroundColor}">
-        <input type="color" class="color-picker text-color-picker" value="${textColor}">
       </div>
     `;
 
@@ -233,8 +238,6 @@ export class StickyNote {
     this.noteElement = this.shadow.querySelector('.sticky-note');
     this.headerElement = this.shadow.querySelector('.sticky-note-header');
     this.contentElement = this.shadow.querySelector('.sticky-note-content');
-    this.bgColorInput = this.shadow.querySelector('.bg-color-picker');
-    this.textColorInput = this.shadow.querySelector('.text-color-picker');
   }
 
   private escapeHtml(text: string): string {
@@ -246,24 +249,36 @@ export class StickyNote {
   private attachEventListeners(): void {
     if (!this.noteElement || !this.headerElement || !this.contentElement) return;
 
-    // Drag functionality
-    this.headerElement.addEventListener('mousedown', this.handleDragStart);
+    // Drag functionality - only on the drag handle, not the whole header
+    const dragHandle = this.shadow.querySelector('.sticky-note-drag-handle');
+    dragHandle?.addEventListener('mousedown', this.handleDragStart);
 
     // Content editing
     this.contentElement.addEventListener('input', this.handleContentChange);
     this.contentElement.addEventListener('focus', this.handleFocus);
 
     // Color pickers
-    const bgColorBtn = this.shadow.querySelector('.sticky-note-bg-color');
-    const textColorBtn = this.shadow.querySelector('.sticky-note-text-color');
+    const bgColorInput = this.shadow.querySelector(`#bg-color-${this.data.id}`) as HTMLInputElement;
+    const textColorInput = this.shadow.querySelector(`#text-color-${this.data.id}`) as HTMLInputElement;
     const deleteBtn = this.shadow.querySelector('.sticky-note-delete');
 
-    bgColorBtn?.addEventListener('click', () => this.bgColorInput?.click());
-    textColorBtn?.addEventListener('click', () => this.textColorInput?.click());
-    deleteBtn?.addEventListener('click', this.handleDelete);
+    bgColorInput?.addEventListener('input', (e) => {
+      const input = e.target as HTMLInputElement;
+      this.data.backgroundColor = input.value;
+      this.noteElement!.style.backgroundColor = input.value;
+      this.data.updatedAt = Date.now();
+      this.notifyUpdate();
+    });
 
-    this.bgColorInput?.addEventListener('change', this.handleBgColorChange);
-    this.textColorInput?.addEventListener('change', this.handleTextColorChange);
+    textColorInput?.addEventListener('input', (e) => {
+      const input = e.target as HTMLInputElement;
+      this.data.textColor = input.value;
+      this.noteElement!.style.color = input.value;
+      this.data.updatedAt = Date.now();
+      this.notifyUpdate();
+    });
+
+    deleteBtn?.addEventListener('click', this.handleDelete);
 
     // Prevent clicks from propagating to page
     this.noteElement.addEventListener('click', (e) => e.stopPropagation());
@@ -333,24 +348,6 @@ export class StickyNote {
     if (!this.contentElement) return;
 
     this.data.content = this.contentElement.textContent || '';
-    this.data.updatedAt = Date.now();
-    this.notifyUpdate();
-  };
-
-  private handleBgColorChange = (e: Event): void => {
-    if (!this.noteElement || !this.bgColorInput) return;
-
-    this.data.backgroundColor = this.bgColorInput.value;
-    this.noteElement.style.backgroundColor = this.data.backgroundColor;
-    this.data.updatedAt = Date.now();
-    this.notifyUpdate();
-  };
-
-  private handleTextColorChange = (e: Event): void => {
-    if (!this.noteElement || !this.textColorInput) return;
-
-    this.data.textColor = this.textColorInput.value;
-    this.noteElement.style.color = this.data.textColor;
     this.data.updatedAt = Date.now();
     this.notifyUpdate();
   };

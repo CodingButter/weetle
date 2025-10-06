@@ -3,7 +3,7 @@
  * Handles mouse tracking, peer connections, and remote cursor rendering
  */
 
-import { PeerConnectionManager, PositionInterpolator } from "@weetle/peer";
+import { PeerConnectionManager } from "@weetle/peer";
 import { platform } from "@weetle/platform";
 import { pixelToUV, getViewportDimensions, getScrollPosition } from "@weetle/peer";
 import {
@@ -20,20 +20,36 @@ import type { DOMDelta } from "@weetle/dom-replicator";
 
 console.log("[Weetle] Content script loaded on:", window.location.href);
 
+// Inject marker element for extension detection
+const extensionMarker = document.createElement('div');
+extensionMarker.setAttribute('data-weetle-extension', 'true');
+extensionMarker.style.display = 'none';
+document.documentElement.appendChild(extensionMarker);
+
+// Listen for extension check messages
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'WEETLE_EXTENSION_CHECK') {
+    window.postMessage({ type: 'WEETLE_EXTENSION_PRESENT' }, '*');
+  }
+});
+
 // Global state
 let peerManager: PeerConnectionManager | null = null;
 let currentUserId: string | null = null;
+let currentCircleId: string = 'anonymous';
 let currentLayerId: string | null = null;
 let isAnonymous = false;
+let isTemporaryCircle = false; // Track if using URL param circle
 let remoteCursors = new Map<string, HTMLDivElement>();
-let cursorInterpolators = new Map<string, PositionInterpolator>();
 let cursorScales = new Map<string, number>(); // Track scale for each cursor
-let animationFrameId: number | null = null;
 let stickyNotesManager: StickyNotesManager | null = null;
 let rpcBridge: RPCBridge | null = null; // RPC for Weetle components
 let domReplicator: DOMReplicator | null = null; // DOM replication for page interactions
 let audioEnabled = false; // Track if audio is enabled (after first user interaction)
 let clickAudio: HTMLAudioElement | null = null;
+
+// Store circle passwords in memory (later will be in extension storage)
+const circlePasswords = new Map<string, string>();
 
 // No more event deduplication needed!
 // DOMReplicator handles ping-pong prevention with ignoreNextMutation
@@ -43,6 +59,17 @@ let clickAudio: HTMLAudioElement | null = null;
  */
 async function initializeWeetle() {
   console.log("[Weetle] Initializing...");
+
+  // Get circle assignment from background worker
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_CIRCLE' });
+    if (response?.circleId) {
+      currentCircleId = response.circleId;
+      console.log(`[Weetle] Using circle: ${currentCircleId}`);
+    }
+  } catch (err) {
+    console.error('[Weetle] Failed to get circle from background:', err);
+  }
 
   // Check if user is authenticated
   const authStatus = await checkAuthStatus();
@@ -98,10 +125,11 @@ async function initializeAnonymousMode() {
   // Generate anonymous user ID (local only)
   currentUserId = `anon_${crypto.randomUUID()}`;
 
-  // For MVP, use a test layer ID (will be dynamic later)
-  currentLayerId = "test-layer-" + window.location.hostname;
+  // Use circle ID from background (could be URL param or default)
+  // Layer ID combines circle and page
+  currentLayerId = `${currentCircleId}-${window.location.hostname}`;
 
-  console.log("[Weetle] Anonymous mode initialized:", displayName);
+  console.log(`[Weetle] Anonymous mode initialized: ${displayName} in circle: ${currentCircleId}`);
 
   // Initialize peer connection
   await initializePeerConnection(displayName);
@@ -198,20 +226,13 @@ function setupPeerEventHandlers() {
   peerManager.on("mouse:move", (event, peerId) => {
     const { u, v, velocity } = event.payload;
 
-    // Get or create interpolator for this peer
-    let interpolator = cursorInterpolators.get(peerId);
-    if (!interpolator) {
-      interpolator = new PositionInterpolator();
-      cursorInterpolators.set(peerId, interpolator);
+    // Get or create cursor for this peer
+    if (!remoteCursors.has(peerId)) {
+      createRemoteCursor(peerId, event.userId);
     }
 
-    // Set target position with velocity for smooth interpolation
-    interpolator.setTarget(u, v, velocity || 0);
-
-    // Ensure animation loop is running
-    if (!animationFrameId) {
-      startCursorAnimation();
-    }
+    // Update cursor position directly without interpolation
+    updateRemoteCursorPosition(peerId, u, v);
   });
 
   // Handle remote clicks
@@ -421,6 +442,7 @@ function createCursorsOverlay() {
   // Create container for cursors
   const overlay = document.createElement("div");
   overlay.id = "weetle-cursors-overlay";
+  overlay.setAttribute('data-weetle', 'cursors-overlay');
   overlay.style.cssText = `
     position: fixed;
     top: 0;
@@ -434,26 +456,10 @@ function createCursorsOverlay() {
   document.body.appendChild(overlay);
 }
 
-/**
- * Start cursor animation loop
- */
-function startCursorAnimation() {
-  function animate() {
-    // Update all cursors with interpolated positions
-    cursorInterpolators.forEach((interpolator, peerId) => {
-      const position = interpolator.getPosition();
-      // Position returns {x, y} in UV coordinates (0-1)
-      updateRemoteCursorPosition(peerId, position.x, position.y);
-    });
-
-    animationFrameId = requestAnimationFrame(animate);
-  }
-
-  animationFrameId = requestAnimationFrame(animate);
-}
+// Animation loop removed - cursor updates are now direct
 
 /**
- * Update remote cursor position (called from animation loop)
+ * Update remote cursor position directly
  */
 function updateRemoteCursorPosition(peerId: string, u: number, v: number) {
   const cursor = remoteCursors.get(peerId);
@@ -491,7 +497,8 @@ function createRemoteCursor(peerId: string, userId: string) {
  */
 function createCursorElement(peerId: string, userId: string): HTMLDivElement {
   const cursor = document.createElement("div");
-  cursor.className = "weetle-remote-cursor";
+  cursor.className = "weetle-remote-cursor weetle-cursor";
+  cursor.setAttribute('data-weetle', 'cursor');
   cursor.dataset.peerId = peerId;
 
   // Generate consistent color from user ID
@@ -593,19 +600,8 @@ function removeRemoteCursor(peerId: string) {
     remoteCursors.delete(peerId);
   }
 
-  const interpolator = cursorInterpolators.get(peerId);
-  if (interpolator) {
-    cursorInterpolators.delete(peerId);
-  }
-
   // Clean up scale state
   cursorScales.delete(peerId);
-
-  // Stop animation if no more cursors
-  if (remoteCursors.size === 0 && animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
 }
 
 /**
@@ -722,7 +718,13 @@ function initializeStickyNotes() {
   });
 
   // Initialize sticky notes manager with RPC
-  stickyNotesManager = new StickyNotesManager(rpcBridge);
+  const pageKey = getPageKey();
+  const circleId = currentCircleId || 'anonymous';
+  const circlePassword = circlePasswords.get(circleId);
+  stickyNotesManager = new StickyNotesManager(rpcBridge, pageKey, circleId, circlePassword);
+
+  // Load persisted state
+  stickyNotesManager.loadFromLocalStorage();
 
   // Initialize DOMReplicator for page interactions (clicks, typing, etc.)
   domReplicator = new DOMReplicator({
@@ -771,6 +773,384 @@ function setupStickyNoteShortcut() {
 
   console.log("[Weetle] Sticky note keyboard shortcut registered (Alt+N)");
 }
+
+// Listen for circle updates from background
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message.type) {
+    case 'CIRCLE_UPDATE':
+      // Store password if provided
+      if (message.password) {
+        circlePasswords.set(message.circleId, message.password);
+      }
+      handleCircleUpdate(message.circleId, message.isTemporary);
+      break;
+
+    case 'CREATE_NOTE_AT':
+      // Context menu action
+      if (stickyNotesManager && currentUserId) {
+        stickyNotesManager.createNote(currentUserId, message.x, message.y);
+      }
+      break;
+
+    case 'COPY_TO_CLIPBOARD':
+      navigator.clipboard.writeText(message.text).then(() => {
+        showNotification('Circle link copied to clipboard!');
+      });
+      break;
+  }
+});
+
+/**
+ * Get page key for current URL
+ */
+function getPageKey(): string {
+  return window.location.origin + window.location.pathname;
+}
+
+/**
+ * Clean up all Weetle elements from the page
+ */
+function cleanupAllWeetleElements(): void {
+  console.log('[Weetle] Cleaning up all Weetle elements');
+
+  // Remove all sticky notes by class
+  document.querySelectorAll('.weetle-sticky-note').forEach(el => {
+    console.log('[Weetle] Removing sticky note:', el);
+    el.remove();
+  });
+
+  // Remove all cursors
+  document.querySelectorAll('.weetle-cursor').forEach(el => {
+    el.remove();
+  });
+
+  // Remove any other Weetle UI elements
+  document.querySelectorAll('[data-weetle]').forEach(el => {
+    el.remove();
+  });
+
+  // Remove cursor overlay if it exists
+  const cursorOverlay = document.getElementById('weetle-cursors-overlay');
+  if (cursorOverlay) {
+    cursorOverlay.remove();
+  }
+
+  // Remove any notification elements
+  document.querySelectorAll('.weetle-notification').forEach(el => {
+    el.remove();
+  });
+}
+
+/**
+ * Handle circle change
+ */
+function handleCircleUpdate(circleId: string, isTemporary: boolean) {
+  console.log(`[Weetle] Circle updated to: ${circleId} (temporary: ${isTemporary})`);
+
+  // Don't reload if same circle
+  if (currentCircleId === circleId) {
+    console.log('[Weetle] Same circle, no reload needed');
+    return;
+  }
+
+  const previousCircle = currentCircleId;
+  currentCircleId = circleId;
+  isTemporaryCircle = isTemporary;
+
+  // Clean up ALL Weetle elements from the page
+  cleanupAllWeetleElements();
+
+  // Clean up existing sticky notes manager
+  if (stickyNotesManager) {
+    console.log(`[Weetle] Switching from ${previousCircle} to ${circleId}`);
+
+    // Destroy all current notes
+    stickyNotesManager.destroy();
+
+    // Create new manager for new circle
+    const pageKey = getPageKey();
+    const circlePassword = circlePasswords.get(circleId);
+    stickyNotesManager = new StickyNotesManager(rpcBridge!, pageKey, circleId, circlePassword);
+
+    // For MVP, load from localStorage - later this should come from server
+    stickyNotesManager.loadFromLocalStorage();
+
+    // TODO: Fetch circle state from server instead of localStorage
+    console.log('[Weetle] Loading state for circle:', circleId);
+
+    // Show notification
+    showNotification(`Switched to ${isTemporary ? 'viewing' : ''} circle: ${circleId}`);
+  }
+
+  // Disconnect from previous circle's peers
+  if (peerManager) {
+    console.log('[Weetle] Disconnecting from previous circle peers');
+    peerManager.cleanup();
+
+    // Clear remote cursors
+    remoteCursors.forEach(cursor => cursor.remove());
+    remoteCursors.clear();
+    cursorScales.clear();
+
+    // Reconnect to new circle's layer
+    const layerId = `${circleId}:${getPageKey()}`;
+    currentLayerId = layerId;
+
+    peerManager.connect(layerId).then(() => {
+      console.log(`[Weetle] Connected to new layer: ${layerId}`);
+
+      // After connecting, load any saved state for this circle
+      // For MVP, use localStorage - later this will come from server
+      if (stickyNotesManager) {
+        stickyNotesManager.loadFromLocalStorage();
+      }
+    }).catch(err => {
+      console.error('[Weetle] Failed to connect to new layer:', err);
+    });
+  }
+}
+
+/**
+ * Show temporary notification
+ */
+function showNotification(text: string) {
+  const notification = document.createElement('div');
+  notification.className = 'weetle-notification';
+  notification.setAttribute('data-weetle', 'notification');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    z-index: 2147483647;
+    animation: slideIn 0.3s ease-out;
+  `;
+  notification.textContent = text;
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+}
+
+/**
+ * Create confirmation modal for circle join
+ */
+function showCircleJoinModal(circleId: string, href: string | null, callback: (join: boolean) => void) {
+  const modal = document.createElement('div');
+  modal.id = 'weetle-join-modal';
+
+  // Create shadow DOM for isolation
+  const shadow = modal.attachShadow({ mode: 'open' });
+
+  shadow.innerHTML = `
+    <style>
+      .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+        animation: fadeIn 0.2s ease-out;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 400px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: slideUp 0.3s ease-out;
+      }
+
+      .modal-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: #333;
+        font-family: system-ui, sans-serif;
+      }
+
+      .modal-text {
+        font-size: 14px;
+        line-height: 1.5;
+        color: #666;
+        margin-bottom: 20px;
+        font-family: system-ui, sans-serif;
+      }
+
+      .circle-id {
+        background: #f3f4f6;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-family: monospace;
+        margin: 12px 0;
+        word-break: break-all;
+      }
+
+      .modal-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: system-ui, sans-serif;
+      }
+
+      .btn-join {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-join:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-view {
+        background: #e5e7eb;
+        color: #374151;
+      }
+
+      .btn-view:hover {
+        background: #d1d5db;
+      }
+
+      .btn-cancel {
+        background: transparent;
+        color: #6b7280;
+      }
+
+      .btn-cancel:hover {
+        background: #f9fafb;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes slideUp {
+        from {
+          transform: translateY(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+    </style>
+
+    <div class="modal-backdrop">
+      <div class="modal-content">
+        <div class="modal-title">Join Weetle Circle?</div>
+        <div class="modal-text">
+          This link wants to add you to a Weetle circle:
+          <div class="circle-id">${circleId}</div>
+          ${href ? `<div style="margin-top: 12px; font-size: 13px;">You'll be redirected to: ${new URL(href).hostname}</div>` : ''}
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-cancel" id="cancel-btn">Cancel</button>
+          <button class="btn-view" id="view-btn">Just View</button>
+          <button class="btn-join" id="join-btn">Join Circle</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Add event listeners
+  shadow.getElementById('join-btn')?.addEventListener('click', () => {
+    modal.remove();
+    callback(true);
+  });
+
+  shadow.getElementById('view-btn')?.addEventListener('click', () => {
+    modal.remove();
+    callback(false);
+  });
+
+  shadow.getElementById('cancel-btn')?.addEventListener('click', () => {
+    modal.remove();
+  });
+
+  // Close on backdrop click
+  shadow.querySelector('.modal-backdrop')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      modal.remove();
+    }
+  });
+
+  document.body.appendChild(modal);
+}
+
+// Listen for data-weetle clicks
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const link = target.closest('a[data-weetle]') as HTMLAnchorElement;
+
+  if (link) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const weetleData = link.dataset.weetle;
+    if (!weetleData) return;
+
+    const [circleId, password] = weetleData.split(':');
+    const href = link.href;
+
+    // Show confirmation modal
+    showCircleJoinModal(circleId, href, async (shouldJoin) => {
+      if (shouldJoin) {
+        // User wants to join the circle
+        console.log(`[Weetle] User accepted circle join: ${circleId}`);
+
+        // Notify background to join circle
+        const response = await chrome.runtime.sendMessage({
+          type: 'JOIN_CIRCLE',
+          circleId,
+          password
+        });
+
+        if (response?.success) {
+          // Navigate to the link destination with the new circle active
+          if (href && href !== '#') {
+            window.location.href = href;
+          }
+        }
+      } else {
+        // User wants to preview without joining
+        console.log(`[Weetle] User wants to preview circle: ${circleId}`);
+
+        if (href && href !== '#') {
+          // Add circle as URL param for preview
+          const url = new URL(href);
+          url.searchParams.set('weetlec', password ? `${circleId}:${password}` : circleId);
+          window.location.href = url.toString();
+        }
+      }
+    });
+  }
+}, true);
 
 // Initialize when DOM is ready
 if (document.readyState === "loading") {

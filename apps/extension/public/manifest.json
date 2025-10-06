@@ -13,7 +13,9 @@
     "tabs",
     "activeTab",
     "scripting",
-    "sidePanel"
+    "sidePanel",
+    "webNavigation",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -39,6 +41,7 @@
     },
     "default_title": "Weetle - Collaborative Browsing"
   },
+  "options_page": "options.html",
   "web_accessible_resources": [
     {
       "resources": [

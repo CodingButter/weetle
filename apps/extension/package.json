@@ -36,6 +36,7 @@
     "@weetle/eecs": "workspace:*",
     "@weetle/peer": "workspace:*",
     "@weetle/platform": "workspace:*",
+    "@weetle/ui": "workspace:*",
     "@types/bun": "latest",
     "@types/chrome": "^0.1.12",
     "@types/react": "^19",

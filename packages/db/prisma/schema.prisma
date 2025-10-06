@@ -129,6 +129,7 @@ model Layer {
 
   circle          Circle          @relation(fields: [circleId], references: [id], onDelete: Cascade)
   marks           Mark[]          // Materialized view of current state
+  elements        Element[]       // Individual element records for granular persistence
   messages        ChatMessage[]
   sessions        SessionRecord[] // Metadata about session files
 
@@ -142,6 +143,27 @@ enum Permission {
   ADMIN_AND_ABOVE
   MEMBER_AND_ABOVE
   ALL
+}
+
+// --- Element-Based Persistence ---
+
+model Element {
+  id           String    @id // Use client-generated UUIDs
+  layerId      String
+  parentId     String?   // For nested/hierarchical elements
+  elementType  String    // 'sticky-note', 'drawing', 'highlight', etc.
+  data         String    // JSON serialized element data
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  layer        Layer     @relation(fields: [layerId], references: [id], onDelete: Cascade)
+  parent       Element?  @relation("ElementChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Element[] @relation("ElementChildren")
+
+  @@index([layerId, elementType])
+  @@index([parentId])
+  @@map("element")
 }
 
 // --- Materialized Views (for quick loading) ---

@@ -1,0 +1,6 @@
+- whenever you make changes to the project you need to update memento. it should always be an accurate reflection of the project as it currently is
+- always refer to memento.. ALWAYS use memento before starting a task.
+- ALWAYS update memento after completing a task
+- Memento is a resource for RAGG use it as such
+- If you cannot gain relevent knowledge from memento research the knowledge you need from the WEB
+- any knowledge gained from the web MUST be added to memento

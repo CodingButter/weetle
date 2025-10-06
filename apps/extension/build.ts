@@ -20,6 +20,7 @@ const result = await Bun.build({
     path.resolve("src", "contentScript.ts"),
     path.resolve("src", "index.html"),
     path.resolve("src", "popup.html"),
+    path.resolve("src", "options.html"),
     path.resolve("src", "background.ts"),
   ],
   outdir,

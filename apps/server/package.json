@@ -7,7 +7,9 @@
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
     "@elysiajs/static": "^1.4.0",
+    "@types/bcrypt": "^6.0.0",
     "@weetle/db": "workspace:*",
+    "bcrypt": "^6.0.0",
     "better-auth": "^1.3.18",
     "dotenv": "^17.2.2",
     "elysia": "latest",

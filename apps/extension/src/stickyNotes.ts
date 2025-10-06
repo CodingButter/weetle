@@ -6,18 +6,34 @@
 
 import { StickyNote, type StickyNoteData } from './stickyNote';
 import type { RPCBridge } from './rpc';
+import { StateManager, type SerializableElement } from './stateManager';
 
 export class StickyNotesManager {
   private notes = new Map<string, StickyNote>();
   private rpc: RPCBridge;
+  private stateManager: StateManager;
 
-  constructor(rpc: RPCBridge) {
+  constructor(rpc: RPCBridge, pageKey: string, circleId: string, circlePassword?: string) {
     this.rpc = rpc;
+    this.stateManager = new StateManager(pageKey, circleId, circlePassword);
 
     // Register RPC handlers
     this.rpc.register('createStickyNote', this.createNoteLocal.bind(this));
     this.rpc.register('updateStickyNote', this.updateNoteLocal.bind(this));
     this.rpc.register('deleteStickyNote', this.deleteNoteLocal.bind(this));
+
+    // Setup state persistence callback
+    this.stateManager.onSave((state) => {
+      console.log('[StickyNotes] Saving state:', state);
+      this.saveToLocalStorage(state);
+    });
+
+    // Setup hydration callback to recreate notes from server
+    this.stateManager.onHydrate((elements) => {
+      console.log('[StickyNotes] Hydrating elements from server:', elements.length);
+      // Reuse existing hydration logic
+      this.hydrateState({ elements });
+    });
   }
 
   /**
@@ -80,6 +96,9 @@ export class StickyNotesManager {
 
     note.mount(document.body);
     this.notes.set(data.id, note);
+
+    // Update state manager
+    this.stateManager.updateElement(this.serializeNote(data));
   }
 
   /**
@@ -93,6 +112,10 @@ export class StickyNotesManager {
     }
 
     note.update(updates);
+
+    // Update state manager with full note data
+    const fullData = note.getData();
+    this.stateManager.updateElement(this.serializeNote(fullData));
   }
 
   /**
@@ -107,6 +130,84 @@ export class StickyNotesManager {
 
     note.destroy();
     this.notes.delete(id);
+
+    // Remove from state manager
+    this.stateManager.removeElement(id);
+  }
+
+  /**
+   * Serialize note data to element format
+   */
+  private serializeNote(data: StickyNoteData): SerializableElement {
+    return {
+      id: data.id,
+      type: 'sticky-note',
+      data: {
+        x: data.x,
+        y: data.y,
+        width: data.width,
+        height: data.height,
+        content: data.content,
+        backgroundColor: data.backgroundColor,
+        textColor: data.textColor,
+      },
+      createdBy: data.createdBy,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    };
+  }
+
+  /**
+   * Save state to localStorage (temp until server is ready)
+   */
+  private saveToLocalStorage(state: any): void {
+    const key = `weetle:layer:${state.circleId}:${state.pageKey}`;
+    console.log('[StickyNotes] Saving to localStorage with key:', key, 'elements:', state.elements?.length || 0);
+    localStorage.setItem(key, JSON.stringify(state));
+  }
+
+  /**
+   * Load state from localStorage
+   */
+  loadFromLocalStorage(): void {
+    const key = `weetle:layer:${this.stateManager['circleId']}:${this.stateManager['pageKey']}`;
+    console.log('[StickyNotes] Loading from localStorage with key:', key);
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const state = JSON.parse(stored);
+        console.log('[StickyNotes] Found stored state for circle:', this.stateManager['circleId'], 'elements:', state.elements?.length || 0);
+        this.hydrateState(state);
+      } catch (err) {
+        console.error('[StickyNotes] Failed to load state:', err);
+      }
+    } else {
+      console.log('[StickyNotes] No stored state found for circle:', this.stateManager['circleId']);
+    }
+  }
+
+  /**
+   * Hydrate state - recreate all elements from stored data
+   */
+  private hydrateState(state: any): void {
+    state.elements.forEach((el: SerializableElement) => {
+      if (el.type === 'sticky-note') {
+        const noteData: StickyNoteData = {
+          id: el.id,
+          x: el.data.x,
+          y: el.data.y,
+          width: el.data.width,
+          height: el.data.height,
+          content: el.data.content,
+          backgroundColor: el.data.backgroundColor,
+          textColor: el.data.textColor,
+          createdBy: el.createdBy,
+          createdAt: el.createdAt,
+          updatedAt: el.updatedAt,
+        };
+        this.createNoteLocal(noteData);
+      }
+    });
   }
 
   /**
