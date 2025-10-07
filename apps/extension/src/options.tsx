@@ -18,7 +18,9 @@ import {
   Star,
   Settings,
   Save,
-  Check
+  Check,
+  Trash2,
+  Lock
 } from '@weetle/ui';
 import '@weetle/ui/styles';
 

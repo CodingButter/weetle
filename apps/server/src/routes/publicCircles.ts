@@ -302,4 +302,75 @@ export const publicCircleRoutes = new Elysia({ prefix: '/public' })
         createdAt: c.createdAt,
       })),
     };
-  });
+  })
+
+  /**
+   * DELETE /public/circles/:id
+   * Delete a public circle (with password verification)
+   */
+  .delete(
+    '/circles/:id',
+    async ({ params, body, set }) => {
+      const { password } = body || {};
+
+      // Don't allow deleting the default circle
+      if (params.id === 'anonymous-default') {
+        set.status = 403;
+        return { error: 'Cannot delete the default anonymous circle' };
+      }
+
+      // Verify circle exists and is public
+      const circle = await prisma.circle.findUnique({
+        where: { id: params.id },
+        select: {
+          passwordHash: true,
+          visibility: true,
+          _count: {
+            select: { layers: true }
+          }
+        },
+      });
+
+      if (!circle) {
+        set.status = 404;
+        return { error: 'Circle not found' };
+      }
+
+      if (circle.visibility !== CircleVisibility.PUBLIC) {
+        set.status = 403;
+        return { error: 'Can only delete public circles through this endpoint' };
+      }
+
+      // Verify password if circle is protected
+      if (circle.passwordHash) {
+        if (!password) {
+          set.status = 401;
+          return { error: 'Password required to delete this circle' };
+        }
+
+        const isValid = await bcrypt.compare(password, circle.passwordHash);
+        if (!isValid) {
+          set.status = 401;
+          return { error: 'Invalid password' };
+        }
+      }
+
+      // Delete the circle (cascade will delete layers and other related data)
+      await prisma.circle.delete({
+        where: { id: params.id },
+      });
+
+      return {
+        success: true,
+        message: `Circle deleted successfully (${circle._count.layers} layers removed)`
+      };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      body: t.Optional(t.Object({
+        password: t.Optional(t.String()),
+      })),
+    }
+  );
